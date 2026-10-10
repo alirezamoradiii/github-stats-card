@@ -37,6 +37,7 @@ const LANG_COLORS: Record<string, string> = {
   CoffeeScript: "#244776",
   Erlang: "#B83998",
   OCaml: "#3be133",
+  OpenSCAD: "#F9D72C",
   Nix: "#7e7eff",
   Docker: "#384d54",
   Dockerfile: "#384d54",
