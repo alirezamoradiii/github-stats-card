@@ -120,6 +120,39 @@ function escapeXml(unsafe: string | null | undefined): string {
     });
 }
 
+function formatBioLines(bio: string, maxCharsPerLine = 48, maxLines = 3): string[] {
+  if (!bio) return [];
+  const cleanBio = bio.replace(/[\r\n]+/g, " ").trim();
+  const words = cleanBio.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const testLine = current ? `${current} ${word}` : word;
+    if (testLine.length <= maxCharsPerLine) {
+      current = testLine;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+      if (lines.length === maxLines) break;
+    }
+  }
+
+  if (lines.length < maxLines && current) {
+    lines.push(current);
+  }
+
+  const consumedChars = lines.join(" ").length;
+  if (cleanBio.length > consumedChars && lines.length === maxLines) {
+    const lastIdx = maxLines - 1;
+    lines[lastIdx] = lines[lastIdx].length > maxCharsPerLine - 3
+      ? lines[lastIdx].slice(0, maxCharsPerLine - 4).trim() + "..."
+      : lines[lastIdx] + "...";
+  }
+
+  return lines.slice(0, maxLines);
+}
+
 function seededRandom(seed: number) {
   let s = seed;
   return () => {
@@ -139,7 +172,7 @@ function ghHeaders(token?: string): HeadersInit {
     Accept: "application/vnd.github.v3+json",
     "User-Agent": "GitHub-Profile-Card-Generator",
   };
-  if (token) h.Authorization = `Bearer ${token}`;
+  if (token) h.Authorization = `token ${token}`;
   return h;
 }
 
@@ -194,21 +227,12 @@ function renderLocalSvgIcon(lang: string, colorHex: string, x: number, y: number
   if (cached) {
     try {
       const { viewBox, inner } = JSON.parse(cached);
-      return `
-        <svg x="${x}" y="${y}" width="26" height="26" viewBox="${viewBox}" fill="${colorHex}">
-          <g fill="${colorHex}">${inner}</g>
-        </svg>`.trim();
-    } catch {
-      // fall through to fallback
-    }
+      return `<svg x="${x}" y="${y}" width="26" height="26" viewBox="${viewBox}" fill="${colorHex}"><g fill="${colorHex}">${inner}</g></svg>`.trim();
+    } catch {}
   }
 
-  return `
-    <circle cx="${x + 13}" cy="${y + 13}" r="13" fill="${colorHex}" opacity="0.85"/>
-    <text x="${x + 13}" y="${y + 17}" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">${escapeXml(lang[0])}</text>
-  `;
+  return `<circle cx="${x + 13}" cy="${y + 13}" r="13" fill="${colorHex}" opacity="0.85"/><text x="${x + 13}" y="${y + 17}" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">${escapeXml(lang[0])}</text>`;
 }
-
 
 async function fetchAllTimeGraphQLStats(username: string, createdYear: number, token?: string) {
   if (!token) return { commits: 0, prs: 0, contribs: 0 };
@@ -384,8 +408,24 @@ export async function GET(req: NextRequest) {
     ? `textLength="${maxNameWidth}" lengthAdjust="spacingAndGlyphs"`
     : "";
 
-  const rawBio = user.bio || "";
-  const bio = escapeXml(rawBio.length > 55 ? rawBio.slice(0, 52) + "..." : rawBio);
+  const rawBio = (user.bio || "").trim();
+  const bioLines = formatBioLines(rawBio, 48, 3);
+  
+  let bioSvg = "";
+  if (bioLines.length === 1) {
+    bioSvg = `<text x="${pad}" y="136" font-size="13" fill="#a1a1aa" font-family="-apple-system,Segoe UI,sans-serif">${escapeXml(bioLines[0])}</text>`;
+  } else if (bioLines.length === 2) {
+    bioSvg = `
+      <text x="${pad}" y="128" font-size="12.5" fill="#a1a1aa" font-family="-apple-system,Segoe UI,sans-serif">${escapeXml(bioLines[0])}</text>
+      <text x="${pad}" y="146" font-size="12.5" fill="#a1a1aa" font-family="-apple-system,Segoe UI,sans-serif">${escapeXml(bioLines[1])}</text>
+    `;
+  } else if (bioLines.length === 3) {
+    bioSvg = `
+      <text x="${pad}" y="122" font-size="12" fill="#a1a1aa" font-family="-apple-system,Segoe UI,sans-serif">${escapeXml(bioLines[0])}</text>
+      <text x="${pad}" y="139" font-size="12" fill="#a1a1aa" font-family="-apple-system,Segoe UI,sans-serif">${escapeXml(bioLines[1])}</text>
+      <text x="${pad}" y="156" font-size="12" fill="#a1a1aa" font-family="-apple-system,Segoe UI,sans-serif">${escapeXml(bioLines[2])}</text>
+    `;
+  }
 
   const rng = seededRandom(1337);
   const stars = Array.from({ length: 32 }, () => {
@@ -407,7 +447,7 @@ export async function GET(req: NextRequest) {
   const statCols = statItems
     .map(([label, val], idx) => {
       const x = idx < 3 ? pad + idx * 140 : pad + (idx - 3) * 140;
-      const y = idx < 3 ? 230 : 300;
+      const y = idx < 3 ? 232 : 302;
 
       return `
         <g>
@@ -472,9 +512,9 @@ export async function GET(req: NextRequest) {
     <rect x="${W - pad - 140}" y="42" width="140" height="32" rx="16" fill="#ffffff" opacity="0.07"/>
     <text x="${W - pad - 70}" y="63" font-size="13" font-weight="600" fill="#e4e4e7" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif">★ ${yearsOnGitHub} yrs active</text>
 
-    ${bio ? `<text x="${pad}" y="138" font-size="14" fill="#a1a1aa" font-family="-apple-system,Segoe UI,sans-serif">${bio}</text>` : ""}
+    ${bioSvg}
 
-    <line x1="${pad}" y1="168" x2="${W - pad}" y2="168" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/>
+    <line x1="${pad}" y1="174" x2="${W - pad}" y2="174" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1.5"/>
 
     ${statCols}
 

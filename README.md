@@ -19,9 +19,9 @@
 
 ---
 
-## Why gitSum?
+## Why github-stats-card?
 
-Most GitHub stat cards suffer from visual bloat, 2018-era gradients, and brittle third-party dependencies. gitSum solves three concrete issues:
+Most GitHub stat cards suffer from visual bloat, 2018-era gradients, and brittle third-party dependencies. github-stats-card solves three concrete issues:
 
 - **Local Vector Assets**: Language icons are bundled and parsed locally from disk. No external CDN downtime, zero third-party rate limits, and no Vercel IP-blocking issues.
 - **Meaningful All-Time Aggregation**: Uses raw GitHub GraphQL queries with fallback handling to fetch true lifetime contributions, commits, PRs, and reviews.
@@ -34,7 +34,7 @@ Most GitHub stat cards suffer from visual bloat, 2018-era gradients, and brittle
 Add the card to your profile `README.md` using standard Markdown image syntax:
 
 ```markdown
-![gitSum](https://github-stats-card-eosin.vercel.app/api/card?username=YOUR_USERNAME&glow=38bdf8)
+![github-stats-card](https://github-stats-card-eosin.vercel.app/api/card?username=YOUR_USERNAME&glow=38bdf8)
 ```
 
 ## Dynamic Glow Accent
