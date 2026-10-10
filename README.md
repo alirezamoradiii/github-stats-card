@@ -6,7 +6,7 @@
 
   <br />
 
-  <img src="https://github-stats-card-git-master-alireza-moradi.vercel.app/api/card?username=alirezamoradiii&glow=89e051" alt="gitSum Card Preview" width="440" />
+  <img src="https://github-stats-card-eosin.vercel.app/api/card?username=alirezamoradiii&glow=89e051" alt="github-stats-card Card Preview" width="440" />
 
   <p>
   If you find this project useful, consider giving it a star.
@@ -34,7 +34,7 @@ Most GitHub stat cards suffer from visual bloat, 2018-era gradients, and brittle
 Add the card to your profile `README.md` using standard Markdown image syntax:
 
 ```markdown
-![gitSum](https://github-stats-card-git-master-alireza-moradi.vercel.app/api/card?username=YOUR_USERNAME)
+![gitSum](https://github-stats-card-eosin.vercel.app/api/card?username=YOUR_USERNAME&glow=38bdf8)
 ```
 
 ## Dynamic Glow Accent
