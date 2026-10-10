@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
+import fs from "fs";
+import path from "path";
 
-// ---------- دیکشنری جامع رنگ‌های رسمی زبان‌ها (بر اساس GitHub Linguist) ----------
 const LANG_COLORS: Record<string, string> = {
   TypeScript: "#3178c6",
   JavaScript: "#f1e05a",
@@ -49,7 +50,6 @@ const LANG_COLORS: Record<string, string> = {
   Makefile: "#427819",
 };
 
-// نگاشت دقیق نام زبان به اسلاگ رسمی SimpleIcons
 const LANG_ICON_SLUGS: Record<string, string> = {
   TypeScript: "typescript",
   JavaScript: "javascript",
@@ -96,7 +96,8 @@ const LANG_ICON_SLUGS: Record<string, string> = {
   Markdown: "markdown",
 };
 
-// ---------- توابع کمکی امن و پایدار ----------
+const localIconCache: Record<string, string> = {};
+
 function sanitizeHex(input: string | null): string {
   if (!input) return "#89e051";
   const clean = input.startsWith("#") ? input : `#${input}`;
@@ -142,7 +143,6 @@ function ghHeaders(token?: string): HeadersInit {
   return h;
 }
 
-// ساخت رنگ پایدار بر اساس نام زبان در صورت نبود در لیست
 function getLanguageColor(lang: string): string {
   if (LANG_COLORS[lang]) return LANG_COLORS[lang];
   let hash = 0;
@@ -153,37 +153,68 @@ function getLanguageColor(lang: string): string {
   return `#${"00000".substring(0, 6 - c.length)}${c}`;
 }
 
-// تشخیص هوشمند اسلاگ برای زبان‌های ناشناخته
 function getLanguageSlug(lang: string): string {
   if (LANG_ICON_SLUGS[lang]) return LANG_ICON_SLUGS[lang];
   return lang.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-// دانلود و تبدیل آیکون با قابلیت Fallback و کش قوی
-async function fetchIconBase64(lang: string, colorHex: string): Promise<string | null> {
-  const slug = getLanguageSlug(lang);
-  if (!slug) return null;
+function renderLocalSvgIcon(lang: string, colorHex: string, x: number, y: number): string {
+  const slug = getLanguageSlug(lang).toLowerCase();
 
-  try {
-    const rawColor = colorHex.replace("#", "");
-    const res = await fetch(`https://cdn.simpleicons.org/${slug}/${rawColor}`, {
-      signal: AbortSignal.timeout(2500),
-      next: { revalidate: 86400 * 7 },
-    });
-    if (!res.ok) return null;
-    const arrayBuffer = await res.arrayBuffer();
-    return `data:image/svg+xml;base64,${Buffer.from(arrayBuffer).toString("base64")}`;
-  } catch {
-    return null;
+  if (localIconCache[slug] === undefined) {
+    try {
+      const filePath = path.join(process.cwd(), "public", "icons", `${slug}.svg`);
+
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf8");
+
+        const viewBoxMatch = raw.match(/viewBox=["']([^"']+)["']/i);
+        const viewBox = viewBoxMatch ? viewBoxMatch[1] : "0 0 24 24";
+
+        const innerMatch = raw.match(/<svg[^>]*>([\s\S]*?)<\/svg>/i);
+        let innerContent = innerMatch ? innerMatch[1] : "";
+
+        innerContent = innerContent
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<!--[\s\S]*?-->/g, "");
+
+        localIconCache[slug] = innerContent.trim()
+          ? JSON.stringify({ viewBox, inner: innerContent })
+          : "";
+      } else {
+        localIconCache[slug] = "";
+      }
+    } catch {
+      localIconCache[slug] = "";
+    }
   }
+
+  const cached = localIconCache[slug];
+
+  if (cached) {
+    try {
+      const { viewBox, inner } = JSON.parse(cached);
+      return `
+        <svg x="${x}" y="${y}" width="26" height="26" viewBox="${viewBox}" fill="${colorHex}">
+          <g fill="${colorHex}">${inner}</g>
+        </svg>`.trim();
+    } catch {
+      // fall through to fallback
+    }
+  }
+
+  return `
+    <circle cx="${x + 13}" cy="${y + 13}" r="13" fill="${colorHex}" opacity="0.85"/>
+    <text x="${x + 13}" y="${y + 17}" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">${escapeXml(lang[0])}</text>
+  `;
 }
 
-// دریافت آمار All-Time در ۱ ریکوئست سبک
+
 async function fetchAllTimeGraphQLStats(username: string, createdYear: number, token?: string) {
   if (!token) return { commits: 0, prs: 0, contribs: 0 };
 
   const currentYear = new Date().getFullYear();
-  const startYear = Math.max(createdYear, currentYear - 8); // تا ۸ سال گذشته
+  const startYear = Math.max(createdYear, currentYear - 8);
   const years: number[] = [];
   for (let y = startYear; y <= currentYear; y++) {
     years.push(y);
@@ -250,7 +281,6 @@ async function fetchAllTimeGraphQLStats(username: string, createdYear: number, t
   }
 }
 
-// دریافت ریپازیتوری‌ها و محاسبه زبان‌ها بدون معطلی و با وزن‌دهی
 async function fetchRepoDataAndLanguages(username: string, token?: string) {
   try {
     const res = await fetch(
@@ -275,7 +305,6 @@ async function fetchRepoDataAndLanguages(username: string, token?: string) {
       totalForks += Number(r.forks_count || 0);
 
       if (r.language) {
-        // ضریب هوشمند بر اساس سایز و فعالیت
         const weight = Math.max(10, Math.min(Number(r.size || 10), 5000));
         langScores[r.language] = (langScores[r.language] || 0) + weight;
       }
@@ -284,14 +313,10 @@ async function fetchRepoDataAndLanguages(username: string, token?: string) {
     const sorted = Object.entries(langScores).sort((a, b) => b[1] - a[1]).slice(0, 4);
     const sum = sorted.reduce((acc, [, val]) => acc + val, 0) || 1;
 
-    const languages = await Promise.all(
-      sorted.map(async ([lang, val]) => {
-        const pct = Math.round((val / sum) * 100);
-        const color = getLanguageColor(lang);
-        const iconBase64 = await fetchIconBase64(lang, color);
-        return [lang, pct, iconBase64] as [string, number, string | null];
-      })
-    );
+    const languages = sorted.map(([lang, val]) => {
+      const pct = Math.round((val / sum) * 100);
+      return [lang, pct] as [string, number];
+    });
 
     return { totalStars, totalForks, languages };
   } catch {
@@ -395,21 +420,17 @@ export async function GET(req: NextRequest) {
   const langStartY = 392;
   const langRowH = 58;
   const langRows = repoData.languages
-    .map(([lang, pct, icon], i) => {
+    .map(([lang, pct], i) => {
       const y = langStartY + i * langRowH;
       const color = getLanguageColor(lang);
       const barX = pad + 40;
       const trackW = W - barX - pad;
       const barW = Math.max(8, Math.round((trackW * pct) / 100));
-
-      const iconSvg = icon
-        ? `<image href="${icon}" x="${pad}" y="${y + 6}" width="26" height="26"/>`
-        : `<circle cx="${pad + 13}" cy="${y + 19}" r="13" fill="${color}" opacity="0.85"/>
-           <text x="${pad + 13}" y="${y + 23}" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle" font-family="sans-serif">${escapeXml(lang[0])}</text>`;
+      const iconGraphic = renderLocalSvgIcon(lang, color, pad, y + 3);
 
       return `
         <g>
-          ${iconSvg}
+          ${iconGraphic}
           <text x="${barX}" y="${y + 4}" font-size="12.5" font-weight="600" fill="#a1a1aa" letter-spacing="0.3" font-family="-apple-system,Segoe UI,sans-serif">${escapeXml(lang)}</text>
           <text x="${W - pad}" y="${y + 4}" font-size="12.5" font-weight="600" fill="#a1a1aa" text-anchor="end" font-family="-apple-system,Segoe UI,sans-serif">${pct}%</text>
           <rect x="${barX}" y="${y + 12}" width="${trackW}" height="9" rx="4.5" fill="#ffffff" opacity="0.08"/>
