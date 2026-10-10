@@ -42,7 +42,7 @@ Add the card to your profile `README.md` using standard Markdown image syntax:
 Customize the ambient glow color by appending a HEX code without #:
 
 ```
-![github-stats-card-git](https://github-stats-card-git-master-alireza-moradi.vercel.app/api/card?username=YOUR_USERNAME&glow=38bdf8)
+![github-stats-card](https://github-stats-card-git-master-alireza-moradi.vercel.app/api/card?username=YOUR_USERNAME&glow=38bdf8)
 ```
 ---
 
